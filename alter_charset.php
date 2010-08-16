@@ -9,7 +9,7 @@
  *
  * @version 1.0
  * @author Denis Sobolev
- * @website http://roundcube.net
+ * @website http://github.com/umount/rcplugin_altercharset
  */
 class alter_charset extends rcube_plugin
 {
@@ -35,11 +35,11 @@ class alter_charset extends rcube_plugin
       $rcmail = rcmail::get_instance();
       $alter_charset = (array)$rcmail->config->get('alter_charset', array());
 
-      $headers = $rcmail->imap->get_headers($msg_uid);
-      if (!($charset = strtoupper($headers->charset)))
-        $charset = strtoupper($rcmail->output->get_charset());
+      $charset = $this->charset($msg_uid);
 
       $url = $_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+
+      //error_log($charset."\n",3,"/var/log/nginx/checkmail_error.log");
 
       if($alias_charset = get_input_value('_alter_charset', RCUBE_INPUT_GET)){
         $charset = $alter_charset[$alias_charset];
@@ -58,6 +58,22 @@ class alter_charset extends rcube_plugin
     return $p;
   }
 
+  private function charset($msg_uid){
+      $rcmail = rcmail::get_instance();
+
+      $headers = $rcmail->imap->get_headers($msg_uid);
+      $charset = strtoupper($headers->charset);
+
+      if (!$charset) {
+        $struct = $rcmail->imap->get_structure($msg_uid, $rcmail->headers->body_structure);
+        if (!empty($struct->parts[0]->parts[0]->charset))
+          $charset = strtoupper($struct->parts[0]->parts[0]->charset);
+      }
+      if (!$charset)
+        $charset = strtoupper($rcmail->output->get_charset());
+      return $charset;
+  }
+
   function change_charset($args) {
     if ($msg_uid = get_input_value('_uid', RCUBE_INPUT_GET)){
 
@@ -66,13 +82,16 @@ class alter_charset extends rcube_plugin
       $headers = $rcmail->imap->get_headers($msg_uid);
 
       if($alias_charset = get_input_value('_alter_charset', RCUBE_INPUT_GET)){
-        $charset = $alter_charset[$alias_charset];
+        $output_charset = $alter_charset[$alias_charset];
       }
 
       $input_charset = $rcmail->output->get_charset();
+      $charset = $this->charset($msg_uid);
 
-      $msg_body = rcube_charset_convert($rcmail->imap->get_body($msg_uid), $input_charset, $charset);
-      return array('body' => $msg_body);
+      $msg_body = rcube_charset_convert($args[body], $input_charset, $charset);
+      $args['body'] = rcube_charset_convert($msg_body, $output_charset);
+
+      return $args;
     }
   }
 }
